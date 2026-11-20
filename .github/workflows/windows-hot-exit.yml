@@ -42,9 +42,16 @@ jobs:
         shell: pwsh
         run: cargo test --locked -p zed --bin zed test_startup_file_request_restores_dirty_standalone_file_workspace
 
-      - name: Build release Zed
+      - name: Build release Zed and CLI
         shell: pwsh
-        run: cargo build --locked --release -p zed
+        run: cargo build --locked --release -p zed -p cli
+
+      - name: Download ConPTY
+        shell: pwsh
+        run: |
+          $url = "https://github.com/microsoft/terminal/releases/download/v1.25.1912.0/Microsoft.Windows.Console.ConPTY.1.25.260710002-preview.nupkg"
+          Invoke-WebRequest -Uri $url -OutFile "conpty.nupkg"
+          Expand-Archive -LiteralPath "conpty.nupkg" -DestinationPath "conpty"
 
       - name: Package Zed for testing
         id: package
@@ -52,7 +59,12 @@ jobs:
         run: |
           $out = "target/zed-hot-exit-windows-x64"
           New-Item -ItemType Directory -Path $out -Force | Out-Null
+          New-Item -ItemType Directory -Path "$out/bin" -Force | Out-Null
+          New-Item -ItemType Directory -Path "$out/x64" -Force | Out-Null
           Copy-Item target/release/zed.exe "$out/Zed.exe"
+          Copy-Item target/release/cli.exe "$out/bin/zed.exe"
+          Copy-Item conpty/runtimes/win-x64/native/conpty.dll "$out/conpty.dll"
+          Copy-Item conpty/build/native/runtimes/x64/OpenConsole.exe "$out/x64/OpenConsole.exe"
           Copy-Item crates/zed/README.md "$out/README.md" -ErrorAction SilentlyContinue
           Compress-Archive -Path "$out/*" -DestinationPath "target/zed-hot-exit-windows-x64.zip" -Force
           "artifact_path=target/zed-hot-exit-windows-x64.zip" >> $env:GITHUB_OUTPUT
