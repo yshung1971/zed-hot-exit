@@ -9013,6 +9013,52 @@ mod tests {
     }
 
     #[gpui::test]
+    async fn test_startup_file_request_restores_dirty_standalone_file_workspace(
+        cx: &mut TestAppContext,
+    ) {
+        let app_state = init_startup_test(cx).await;
+        app_state
+            .fs
+            .as_fake()
+            .insert_tree(path!("/standalone.txt"), "saved content".into())
+            .await;
+        let window = open_test_workspace_paths(
+            vec![PathBuf::from(path!("/standalone.txt"))],
+            app_state.clone(),
+            cx,
+        )
+        .await
+        .window;
+        window
+            .update(cx, |multi_workspace, window, cx| {
+                let editor = multi_workspace
+                    .workspace()
+                    .read(cx)
+                    .active_item_as::<Editor>(cx)
+                    .expect("standalone file should be open in an editor");
+                editor.update(cx, |editor, cx| editor.insert("unsaved changes", window, cx));
+            })
+            .unwrap();
+        cx.run_until_parked();
+        restart_startup_test_session(&app_state, cx).await;
+
+        let (request, _cli) =
+            cli_request(&[path!("/standalone.txt")], cli::OpenBehavior::Default);
+        open_on_startup(request, &app_state, cx).await;
+
+        let windows = startup_windows(cx);
+        assert_eq!(windows.len(), 1);
+        assert_eq!(windows[0].0, vec![PathBuf::from(path!("/standalone.txt"))]);
+        assert_eq!(windows[0].1.len(), 1);
+        assert!(windows[0].1[0].1, "the restored file should remain dirty");
+        assert!(
+            windows[0].1[0].0.contains("unsaved changes"),
+            "the restored file should include unsaved changes, got {:?}",
+            windows[0].1[0].0
+        );
+    }
+
+    #[gpui::test]
     async fn test_startup_request_for_file_links_with_positions_puts_each_cursor_in_its_file(
         cx: &mut TestAppContext,
     ) {

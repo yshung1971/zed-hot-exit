@@ -1048,8 +1048,7 @@ pub(crate) fn open_startup_request(
         let mut requested = cx
             .spawn({
                 let fs = app_state.fs.clone();
-                let db = cx.update(|cx| workspace::WorkspaceDb::global(cx));
-                async move |_| RequestedProject::new(fs.as_ref(), &db, &requested).await
+                async move |_| RequestedProject::new(fs.as_ref(), &requested).await
             })
             .fuse();
         let requested = futures::select_biased! {
@@ -1240,14 +1239,13 @@ struct RequestedProject {
 }
 
 impl RequestedProject {
-    async fn new(fs: &dyn Fs, db: &workspace::WorkspaceDb, requested: &RequestedPaths) -> Self {
+    async fn new(fs: &dyn Fs, requested: &RequestedPaths) -> Self {
         let paths = derive_paths_with_position(fs, &requested.paths)
             .await
             .into_iter()
             .map(|path| path.path)
             .collect::<Vec<_>>();
-        let mut joins_restored_windows =
-            requested.reuses_windows && !db.has_workspace_for_roots(&paths);
+        let mut joins_restored_windows = requested.reuses_windows;
         for path in &paths {
             if fs.is_dir(path).await {
                 joins_restored_windows = false;

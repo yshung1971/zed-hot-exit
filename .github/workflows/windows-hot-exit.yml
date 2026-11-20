@@ -1,0 +1,65 @@
+name: Windows hot-exit build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 360
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: "1"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Set up Rust
+        shell: pwsh
+        run: |
+          rustup show
+          rustc --version
+          cargo --version
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Run hot-exit regression test
+        shell: pwsh
+        run: cargo test --locked -p zed --bin zed test_startup_file_request_restores_dirty_standalone_file_workspace
+
+      - name: Build release Zed
+        shell: pwsh
+        run: cargo build --locked --release -p zed
+
+      - name: Package Zed for testing
+        id: package
+        shell: pwsh
+        run: |
+          $out = "target/zed-hot-exit-windows-x64"
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          Copy-Item target/release/zed.exe "$out/Zed.exe"
+          Copy-Item crates/zed/README.md "$out/README.md" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$out/*" -DestinationPath "target/zed-hot-exit-windows-x64.zip" -Force
+          "artifact_path=target/zed-hot-exit-windows-x64.zip" >> $env:GITHUB_OUTPUT
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: zed-hot-exit-windows-x64
+          path: ${{ steps.package.outputs.artifact_path }}
+          if-no-files-found: error
