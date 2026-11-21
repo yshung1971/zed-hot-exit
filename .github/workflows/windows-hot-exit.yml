@@ -15,7 +15,9 @@ jobs:
     timeout-minutes: 360
     env:
       CARGO_TERM_COLOR: always
+      RELEASE_CHANNEL: stable
       RUST_BACKTRACE: "1"
+      ZED_RELEASE_CHANNEL: stable
 
     steps:
       - name: Check out repository
@@ -45,6 +47,15 @@ jobs:
       - name: Build release Zed and CLI
         shell: pwsh
         run: cargo build --locked --release -p zed -p cli
+
+      - name: Verify stable release channel
+        shell: pwsh
+        run: |
+          $version = (& target/release/cli.exe --version 2>&1 | Out-String).Trim()
+          Write-Output $version
+          if ($version -match '\bdev\b') {
+            throw "Expected a stable build, but CLI reported: $version"
+          }
 
       - name: Download ConPTY
         shell: pwsh
